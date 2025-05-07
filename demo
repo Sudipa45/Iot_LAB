@@ -1,0 +1,79 @@
+void setup() {
+  Serial.begin(115200);
+  Serial.println("hello world");
+
+  pinMode(2, OUTPUT); // Setup pin 2 as output
+
+  WiFi.begin(SSID.c_str(), WIFIPASS.c_str());
+  Serial.print("Connecting to Wi-Fi");
+  while (WiFi.status() != WL_CONNECTED) {
+    Serial.print(".");
+    delay(500);
+  }
+  Serial.println("Connected!");
+
+  config.api_key = FIREBASE_API_KEY;
+  config.database_url = DATABASE_URL;
+  auth.user.email = "database_gmail";
+  auth.user.password = "gmail_pass";
+
+  Serial.println("Initializing Firebase...");
+  Firebase.begin(&config, &auth);
+  Firebase.reconnectWiFi(true);
+  Serial.println("Firebase.begin done");
+
+  delay(3000); // more time for token generation
+
+  if (Firebase.ready()) {
+    Serial.println("Firebase is ready");
+    if (Firebase.RTDB.setString(&fbdo, "/led/state", "hello from esp")) {
+      Serial.println("Data uploaded");
+    } else {
+      Serial.println("Data not uploaded");
+      Serial.println(fbdo.errorReason());
+    }
+  } else {
+    Serial.println("Firebase not ready yet");
+  }
+}
+
+void loop() {
+  Cloudtask();
+  delay(500);
+}
+
+void Cloudtask() {
+  if (Firebase.ready()) {
+    if (Firebase.RTDB.getString(&fbdo, "/led/state")) {
+      FDB = fbdo.stringData();
+      FDB.trim();
+      if (prev_fdb != FDB) {
+        Serial.println(FDB);
+        data_engine(FDB);
+        prev_fdb = FDB;
+
+        // Control pin 2 based on FDB value
+        if (FDB == "on") {
+          digitalWrite(2, HIGH);
+        } else if (FDB == "off") {
+          digitalWrite(2, LOW);
+        }
+      }
+    } else {
+      Serial.println(fbdo.errorReason());
+    }
+  }
+}
+
+void data_engine(String DATA) {
+  int pre_index = 0;
+  for (int i = 0; i < DATA.length(); i++) {
+    if (DATA[i] == '~') {
+      Serial.println(DATA.substring(pre_index, i));
+      pre_index = i + 1;
+    }
+  }
+  if (pre_index < DATA.length()) {
+    Serial.println(DATA.substring(pre_index));
+  }
+}
